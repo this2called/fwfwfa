@@ -152,12 +152,7 @@ do
 					return response
 				end
 
-				local function getResponse()
-					return game:HttpGet(url)
-				end
-
-				while true do
-				end
+				return nil
 			end
 
 			getgenv().safeHttpGet = safeHttpGet
@@ -4011,8 +4006,7 @@ do
 								Stop = function()
 								end,
 								Clone = function()
-									while true do
-									end
+									return nil
 								end,
 							}
 						end
