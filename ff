@@ -1,3 +1,652 @@
+--[[
+    Delta Trolling Hub - Core Runtime & UI Framework (Mobile & PC)
+    Built for Delta, Codex, Arceus X, Fluxus, Synapse, etc.
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
+local CoreGui = game:GetService("CoreGui")
+
+local localPlayer_ = Players.LocalPlayer
+local character = localPlayer_.Character or localPlayer_.CharacterAdded:Wait()
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+local Camera = workspace.CurrentCamera
+
+localPlayer_.CharacterAdded:Connect(function(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    humanoidRootPart = char:WaitForChild("HumanoidRootPart")
+end)
+
+-- Global tables & settings
+local tbl = {}
+local tbl3 = {
+    accent = Color3.fromRGB(168, 85, 247),
+    background = Color3.fromRGB(18, 18, 22),
+    secondary = Color3.fromRGB(24, 24, 28),
+    card = Color3.fromRGB(28, 28, 34),
+    text = Color3.fromRGB(244, 244, 245),
+    textMuted = Color3.fromRGB(161, 161, 170),
+    border = Color3.fromRGB(45, 45, 52),
+    success = Color3.fromRGB(34, 197, 94),
+    danger = Color3.fromRGB(239, 68, 68)
+}
+local L1 = { step2 = 999999999, step3 = 0, step4 = 999999999 }
+local spill_2 = {}
+
+-- Notifications
+local function SendNotification(title, text, duration)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title or "Delta Hub",
+            Text = text or "",
+            Duration = duration or 3
+        })
+    end)
+end
+getgenv().SendNotification = SendNotification
+_G.SendNotification = SendNotification
+
+-- Safe HTTP Get
+local function safeHttpGet(url)
+    local req = syn and syn.request or http and http.request or http_request or request
+    if req then
+        local success, res = pcall(function()
+            return req({ Url = url, Method = "GET" })
+        end)
+        if success and res and res.Body then return res.Body end
+    end
+    local ok, res = pcall(function() return game:HttpGet(url) end)
+    if ok and res then return res end
+    return ""
+end
+getgenv().safeHttpGet = safeHttpGet
+_G.safeHttpGet = safeHttpGet
+
+-- Premium bypasses for full trolling functions
+getgenv().isNoDelayAllowed = function() return true end
+_G.isNoDelayAllowed = function() return true end
+getgenv().IsKeyVerified = true
+getgenv().EternityIsWhitelisted = true
+getgenv().isUserWhitelisted = function() return true end
+
+-- Helper functions for styling
+local function corner(inst, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 6)
+    c.Parent = inst
+    return c
+end
+
+local function padding(inst, top, right, bottom, left)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop = UDim.new(0, top or 0)
+    p.PaddingRight = UDim.new(0, right or 0)
+    p.PaddingBottom = UDim.new(0, bottom or 0)
+    p.PaddingLeft = UDim.new(0, left or 0)
+    p.Parent = inst
+    return p
+end
+
+-- Parent GUI
+local function getGuiParent()
+    local ok, p = pcall(function() return CoreGui end)
+    if ok and p then return p end
+    return localPlayer_:WaitForChild("PlayerGui")
+end
+
+if getgenv and getgenv().DeltaTrollingUI then
+    pcall(function() getgenv().DeltaTrollingUI:Destroy() end)
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaTrollingHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+if syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = getGuiParent()
+elseif gethui then
+    ScreenGui.Parent = gethui()
+else
+    ScreenGui.Parent = getGuiParent()
+end
+getgenv().DeltaTrollingUI = ScreenGui
+
+-- Floating Mobile Open/Close Button
+local ToggleBtn = Instance.new("ImageButton")
+ToggleBtn.Name = "DeltaMobileToggle"
+ToggleBtn.Size = UDim2.new(0, 48, 0, 48)
+ToggleBtn.Position = UDim2.new(0, 15, 0.5, -24)
+ToggleBtn.BackgroundColor3 = tbl3.secondary
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Image = "rbxassetid://10747373176"
+ToggleBtn.ImageColor3 = tbl3.accent
+ToggleBtn.Parent = ScreenGui
+corner(ToggleBtn, 100)
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = tbl3.accent
+ToggleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+ToggleStroke.Parent = ToggleBtn
+
+-- Dragging for Mobile & PC
+local function makeDraggable(guiObject, dragHandle)
+    dragHandle = dragHandle or guiObject
+    local dragging, dragStart, startPos, dragInput
+
+    dragHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = guiObject.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    dragHandle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            guiObject.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+makeDraggable(ToggleBtn)
+
+-- Main Hub Window
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainWindow"
+MainFrame.Size = UDim2.new(0, 520, 0, 360)
+MainFrame.Position = UDim2.new(0.5, -260, 0.5, -180)
+MainFrame.BackgroundColor3 = tbl3.background
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+corner(MainFrame, 10)
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 1.2
+MainStroke.Color = tbl3.border
+MainStroke.Parent = MainFrame
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- Window TopBar
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 38)
+TopBar.BackgroundColor3 = tbl3.secondary
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+corner(TopBar, 10)
+makeDraggable(MainFrame, TopBar)
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -90, 1, 0)
+TitleLabel.Position = UDim2.new(0, 14, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "⚡ DELTA TROLLING HUB"
+TitleLabel.TextColor3 = tbl3.text
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 13
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TopBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 24)
+CloseBtn.Position = UDim2.new(1, -34, 0.5, -12)
+CloseBtn.BackgroundColor3 = tbl3.danger
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TopBar
+corner(CloseBtn, 6)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+-- Container for Pages
+local PageContainer = Instance.new("Frame")
+PageContainer.Name = "PageContainer"
+PageContainer.Size = UDim2.new(1, -12, 1, -48)
+PageContainer.Position = UDim2.new(0, 6, 0, 42)
+PageContainer.BackgroundTransparency = 1
+PageContainer.Parent = MainFrame
+
+-- UI Builder Functions expected by Trolling Code
+function createPage(name)
+    local page = Instance.new("Frame")
+    page.Name = name .. "_page"
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.Parent = PageContainer
+    return page
+end
+
+function createSubTabBar(parent, list)
+    local subBar = Instance.new("ScrollingFrame")
+    subBar.Name = "SubTabBar"
+    subBar.Size = UDim2.new(1, 0, 0, 36)
+    subBar.Position = UDim2.new(0, 0, 0, 0)
+    subBar.BackgroundColor3 = tbl3.secondary
+    subBar.BorderSizePixel = 0
+    subBar.ScrollBarThickness = 0
+    subBar.ScrollingDirection = Enum.ScrollingDirection.X
+    subBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+    subBar.CanvasSize = UDim2.new(0, 0, 0, 0)
+    subBar.Parent = parent
+    corner(subBar, 8)
+    padding(subBar, 3, 4, 3, 4)
+
+    local barLayout = Instance.new("UIListLayout")
+    barLayout.FillDirection = Enum.FillDirection.Horizontal
+    barLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    barLayout.Padding = UDim.new(0, 6)
+    barLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    barLayout.Parent = subBar
+
+    local tabs = {}
+    local tabButtons = {}
+
+    for i, item in ipairs(list) do
+        local page = Instance.new("ScrollingFrame")
+        page.Name = item.id .. "_content"
+        page.Size = UDim2.new(1, 0, 1, -42)
+        page.Position = UDim2.new(0, 0, 0, 42)
+        page.BackgroundTransparency = 1
+        page.BorderSizePixel = 0
+        page.ScrollBarThickness = 3
+        page.ScrollBarImageColor3 = tbl3.accent
+        page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        page.CanvasSize = UDim2.new(0, 0, 0, 0)
+        page.Visible = (i == 1)
+        page.Parent = parent
+        padding(page, 4, 4, 8, 4)
+
+        local layout = Instance.new("UIListLayout")
+        layout.FillDirection = Enum.FillDirection.Vertical
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Padding = UDim.new(0, 6)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.Parent = page
+
+        tabs[item.id] = page
+
+        local btn = Instance.new("TextButton")
+        btn.Name = "Tab_" .. item.id
+        btn.Size = UDim2.new(0, 105, 1, -2)
+        btn.BackgroundColor3 = (i == 1) and tbl3.accent or tbl3.card
+        btn.BorderSizePixel = 0
+        btn.Text = item.name
+        btn.TextColor3 = (i == 1) and Color3.fromRGB(255, 255, 255) or tbl3.textMuted
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 11
+        btn.Parent = subBar
+        corner(btn, 6)
+
+        table.insert(tabButtons, { button = btn, id = item.id })
+
+        btn.MouseButton1Click:Connect(function()
+            for _, tPage in pairs(tabs) do
+                tPage.Visible = false
+            end
+            page.Visible = true
+
+            for _, tb in ipairs(tabButtons) do
+                if tb.id == item.id then
+                    tb.button.BackgroundColor3 = tbl3.accent
+                    tb.button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                else
+                    tb.button.BackgroundColor3 = tbl3.card
+                    tb.button.TextColor3 = tbl3.textMuted
+                end
+            end
+        end)
+    end
+
+    return tabs
+end
+
+function createSection(parent, text, layoutOrder)
+    local sec = Instance.new("Frame")
+    sec.Name = "Section_" .. text
+    sec.Size = UDim2.new(1, -4, 0, 24)
+    sec.BackgroundTransparency = 1
+    sec.LayoutOrder = layoutOrder or 0
+    sec.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.Position = UDim2.new(0, 4, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = string.upper(text)
+    lbl.TextColor3 = tbl3.accent
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 10
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = sec
+    return sec
+end
+
+function createToggle(parent, title, desc, flagName, layoutOrder, callback)
+    local card = Instance.new("Frame")
+    card.Name = "Toggle_" .. tostring(flagName or title)
+    card.Size = UDim2.new(1, -4, 0, 42)
+    card.BackgroundColor3 = tbl3.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = layoutOrder or 0
+    card.Parent = parent
+    corner(card, 6)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = tbl3.border
+    stroke.Parent = card
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size = UDim2.new(1, -64, 0, 20)
+    tLabel.Position = UDim2.new(0, 10, 0, 3)
+    tLabel.BackgroundTransparency = 1
+    tLabel.Text = title
+    tLabel.TextColor3 = tbl3.text
+    tLabel.Font = Enum.Font.GothamBold
+    tLabel.TextSize = 11
+    tLabel.TextXAlignment = Enum.TextXAlignment.Left
+    tLabel.Parent = card
+
+    local dLabel = Instance.new("TextLabel")
+    dLabel.Size = UDim2.new(1, -64, 0, 16)
+    dLabel.Position = UDim2.new(0, 10, 0, 22)
+    dLabel.BackgroundTransparency = 1
+    dLabel.Text = desc or ""
+    dLabel.TextColor3 = tbl3.textMuted
+    dLabel.Font = Enum.Font.Gotham
+    dLabel.TextSize = 9
+    dLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    dLabel.Parent = card
+
+    local switch = Instance.new("TextButton")
+    switch.Size = UDim2.new(0, 42, 0, 22)
+    switch.Position = UDim2.new(1, -50, 0.5, -11)
+    switch.BackgroundColor3 = tbl3.border
+    switch.Text = "OFF"
+    switch.TextColor3 = Color3.fromRGB(255, 255, 255)
+    switch.Font = Enum.Font.GothamBold
+    switch.TextSize = 10
+    switch.BorderSizePixel = 0
+    switch.Parent = card
+    corner(switch, 11)
+
+    local state = false
+    if flagName then tbl[flagName] = false end
+
+    switch.MouseButton1Click:Connect(function()
+        state = not state
+        if flagName then tbl[flagName] = state end
+        switch.BackgroundColor3 = state and tbl3.accent or tbl3.border
+        switch.Text = state and "ON" or "OFF"
+        if callback then
+            task.spawn(callback, state)
+        end
+    end)
+    return card
+end
+
+function createActionButton(parent, title, desc, layoutOrder, callback)
+    local card = Instance.new("Frame")
+    card.Name = "Button_" .. title
+    card.Size = UDim2.new(1, -4, 0, 40)
+    card.BackgroundColor3 = tbl3.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = layoutOrder or 0
+    card.Parent = parent
+    corner(card, 6)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = tbl3.border
+    stroke.Parent = card
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size = UDim2.new(1, -95, 0, 20)
+    tLabel.Position = UDim2.new(0, 10, 0, 3)
+    tLabel.BackgroundTransparency = 1
+    tLabel.Text = title
+    tLabel.TextColor3 = tbl3.text
+    tLabel.Font = Enum.Font.GothamBold
+    tLabel.TextSize = 11
+    tLabel.TextXAlignment = Enum.TextXAlignment.Left
+    tLabel.Parent = card
+
+    local dLabel = Instance.new("TextLabel")
+    dLabel.Size = UDim2.new(1, -95, 0, 16)
+    dLabel.Position = UDim2.new(0, 10, 0, 21)
+    dLabel.BackgroundTransparency = 1
+    dLabel.Text = desc or ""
+    dLabel.TextColor3 = tbl3.textMuted
+    dLabel.Font = Enum.Font.Gotham
+    dLabel.TextSize = 9
+    dLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    dLabel.Parent = card
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 75, 0, 24)
+    btn.Position = UDim2.new(1, -85, 0.5, -12)
+    btn.BackgroundColor3 = tbl3.accent
+    btn.Text = "RUN"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10
+    btn.BorderSizePixel = 0
+    btn.Parent = card
+    corner(btn, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        if callback then task.spawn(callback) end
+    end)
+    return card
+end
+
+function createSlider(parent, title, desc, flagName, minVal, maxVal, defaultVal, layoutOrder, callback)
+    local card = Instance.new("Frame")
+    card.Name = "Slider_" .. title
+    card.Size = UDim2.new(1, -4, 0, 50)
+    card.BackgroundColor3 = tbl3.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = layoutOrder or 0
+    card.Parent = parent
+    corner(card, 6)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = tbl3.border
+    stroke.Parent = card
+
+    local val = defaultVal or minVal
+    if flagName then tbl[flagName] = val end
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size = UDim2.new(1, -60, 0, 20)
+    tLabel.Position = UDim2.new(0, 10, 0, 4)
+    tLabel.BackgroundTransparency = 1
+    tLabel.Text = title
+    tLabel.TextColor3 = tbl3.text
+    tLabel.Font = Enum.Font.GothamBold
+    tLabel.TextSize = 11
+    tLabel.TextXAlignment = Enum.TextXAlignment.Left
+    tLabel.Parent = card
+
+    local vLabel = Instance.new("TextLabel")
+    vLabel.Size = UDim2.new(0, 45, 0, 20)
+    vLabel.Position = UDim2.new(1, -55, 0, 4)
+    vLabel.BackgroundTransparency = 1
+    vLabel.Text = tostring(val)
+    vLabel.TextColor3 = tbl3.accent
+    vLabel.Font = Enum.Font.GothamBold
+    vLabel.TextSize = 11
+    vLabel.TextXAlignment = Enum.TextXAlignment.Right
+    vLabel.Parent = card
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -20, 0, 8)
+    bar.Position = UDim2.new(0, 10, 0, 32)
+    bar.BackgroundColor3 = tbl3.border
+    bar.BorderSizePixel = 0
+    bar.Parent = card
+    corner(bar, 4)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((val - minVal) / (maxVal - minVal), 0, 1, 0)
+    fill.BackgroundColor3 = tbl3.accent
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    corner(fill, 4)
+
+    local dragging = false
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            val = math.floor(minVal + ((maxVal - minVal) * pos))
+            fill.Size = UDim2.new(pos, 0, 1, 0)
+            vLabel.Text = tostring(val)
+            if flagName then tbl[flagName] = val end
+            if callback then task.spawn(callback, val) end
+        end
+    end)
+    return card
+end
+
+function createInputField(parent, title, placeholder, flagName, layoutOrder)
+    local card = Instance.new("Frame")
+    card.Name = "Input_" .. title
+    card.Size = UDim2.new(1, -4, 0, 40)
+    card.BackgroundColor3 = tbl3.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = layoutOrder or 0
+    card.Parent = parent
+    corner(card, 6)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Color = tbl3.border
+    stroke.Parent = card
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size = UDim2.new(0.4, 0, 1, 0)
+    tLabel.Position = UDim2.new(0, 10, 0, 0)
+    tLabel.BackgroundTransparency = 1
+    tLabel.Text = title
+    tLabel.TextColor3 = tbl3.text
+    tLabel.Font = Enum.Font.GothamBold
+    tLabel.TextSize = 11
+    tLabel.TextXAlignment = Enum.TextXAlignment.Left
+    tLabel.Parent = card
+
+    local tb = Instance.new("TextBox")
+    tb.Size = UDim2.new(0.55, -15, 0, 24)
+    tb.Position = UDim2.new(0.45, 0, 0.5, -12)
+    tb.BackgroundColor3 = tbl3.secondary
+    tb.Text = ""
+    tb.PlaceholderText = placeholder or "Type here..."
+    tb.TextColor3 = tbl3.text
+    tb.PlaceholderColor3 = tbl3.textMuted
+    tb.Font = Enum.Font.Gotham
+    tb.TextSize = 10
+    tb.BorderSizePixel = 0
+    tb.Parent = card
+    corner(tb, 4)
+
+    tb.FocusLost:Connect(function()
+        if flagName then tbl[flagName] = tb.Text end
+    end)
+    return card
+end
+
+-- Stubs for miscellaneous UI helpers called by the module
+function createGridContainer(parent, layoutOrder)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, -4, 0, 40)
+    f.BackgroundTransparency = 1
+    f.LayoutOrder = layoutOrder or 0
+    f.Parent = parent
+    local l = Instance.new("UIListLayout")
+    l.FillDirection = Enum.FillDirection.Horizontal
+    l.Padding = UDim.new(0, 6)
+    l.Parent = f
+    return f
+end
+
+function createGridButton(parent, text, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.5, -3, 1, 0)
+    b.BackgroundColor3 = tbl3.card
+    b.Text = text
+    b.TextColor3 = tbl3.text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 10
+    b.Parent = parent
+    corner(b, 6)
+    b.MouseButton1Click:Connect(function()
+        if callback then task.spawn(callback) end
+    end)
+    return b
+end
+
+function createRipple() end
+function createUICorner(inst, r) return corner(inst, r) end
+function createUIStroke(inst, col, th)
+    local s = Instance.new("UIStroke")
+    s.Color = col or tbl3.border
+    s.Thickness = th or 1
+    s.Parent = inst
+    return s
+end
+function createUIStroke2(...) return createUIStroke(...) end
+function createKeybindToggle(...) return createToggle(...) end
+function createTargetUtilBtn(...) return createActionButton(...) end
+
+--// END RUNTIME SHELL - BEGIN TROLLING MODULE
+
+
 						trollingPage = createPage("trolling")
 
 						_trollContainers = createSubTabBar(trollingPage, {
